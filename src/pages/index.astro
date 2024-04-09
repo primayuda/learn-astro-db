@@ -1,0 +1,120 @@
+---
+import Base from "../layouts/Base.astro";
+import { db, Guestbook } from 'astro:db';
+import { Blog, Client, Comment, Author, CheckResult } from '@cedx/akismet';
+import { cli } from "@astrojs/db";
+
+// watch for POST request
+if (Astro.request.method === 'POST') {
+  const blog = new Blog({ url: 'https://www.ryantrimbel.com' });
+  const client = new Client(import.meta.env.AKISMET_TOKEN, blog);
+
+  try {
+    // Parse form data
+    let formData = await Astro.request.formData();
+    let author = formData.get('author');
+    let content = formData.get('content');
+    let special = formData.get('special');
+
+    // Will be used to validate Akismet API key
+    let isValid = false;
+
+    // if special is falsy, proceed to validation
+    if (!special) {
+      // check if Akismet API key is valid
+      try {
+        isValid = await client.verifyKey();
+      } catch (error) {
+        handleError(error);
+      }
+
+      if (isValid) {
+        if (typeof author === 'string' && typeof content === 'string') {
+          try {
+            let commentAuthor = new Author({
+              name: author,
+            });
+
+            let comment = new Comment({
+              author: commentAuthor,
+              content
+            });
+
+            const result = await client.checkComment(comment);
+
+            // if comment is not spam
+            if (result === CheckResult.ham) {
+              // Insert into database
+              await db.insert(Guestbook).values({author, content});
+              // redirect to home page
+              return Astro.redirect('/')
+            } else {
+              // Otherwise disregard comment
+              throw new Error('This comment has not been published');
+            }
+          } catch (error) {
+            if (typeof error === 'string' || typeof error === 'object') {
+              handleError(error);
+            }
+          }
+        } 
+
+        }
+      }
+      
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(error.message);
+    }
+  }
+  
+}
+
+// @ts-ignore
+function handleError(error) {
+  if (typeof error === 'string' || typeof error === 'object') {
+    const message = error instanceof Error ? error.message : String(error);
+    console.log(`An error occurred ${message}`);
+  }
+};
+
+// Select all items from the Guestbook table
+const guestbook = await db.select().from(Guestbook);
+---
+
+<Base>
+  <h1>Astro</h1>
+  <dl>
+    {
+      guestbook
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        .map(({ author, content, timestamp }) => (
+          <div>
+            <dt>{author}</dt>
+            <dt>{content}</dt>
+            <dt>{timestamp}</dt>
+          </div>
+          <hr />
+        )
+      )
+    }
+  </dl>
+<form method="POST">
+  <label for="author">
+    Author
+    <input id="author" name="author" type="text" />
+  </label>
+
+  <label for="special">
+    <input id="special" name="special" />
+  </label>
+
+  <label for="content">
+    Content
+    <textarea id="content" name="content"></textarea>
+  </label>
+
+  <button type="reset">Cancel</button>
+  <button type="submit">Leave your mark!</button>
+</form>
+</Base>
