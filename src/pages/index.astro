@@ -6,7 +6,7 @@ import { cli } from "@astrojs/db";
 
 // watch for POST request
 if (Astro.request.method === 'POST') {
-  const blog = new Blog({ url: 'https://www.ryantrimbel.com' });
+  const blog = new Blog({ url: 'https://learn-astro-db.vercel.app/' });
   const client = new Client(import.meta.env.AKISMET_TOKEN, blog);
 
   try {
@@ -16,6 +16,7 @@ if (Astro.request.method === 'POST') {
     let content = formData.get('content');
     let special = formData.get('special');
 
+    console.log(author, content, special)
     // Will be used to validate Akismet API key
     let isValid = false;
 
@@ -106,7 +107,7 @@ const guestbook = await db.select().from(Guestbook);
   </label>
 
   <label for="special">
-    <input id="special" name="special" />
+    <input id="special" name="special" hidden />
   </label>
 
   <label for="content">
